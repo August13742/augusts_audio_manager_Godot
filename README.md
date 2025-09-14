@@ -13,7 +13,7 @@ A comprehensive audio management plugin for Godot 4 that provides centralized co
 
 ## Quick Setup
 
-1. Copy the plugin to `res://addons/`
+1. Copy the plugin to `res://addons/augusts_audio_manager` (exact match or edit plugin.gd yourself)
 2. Enable the plugin in Project Settings
 3. Ensure audio buses exist: `Master` → `Music` and `SFX`
 
@@ -21,15 +21,15 @@ A comprehensive audio management plugin for Godot 4 that provides centralized co
 
 ```gdscript
 # Play a sound effect
-var sfx = preload("res://my_sfx_resource.tres")
+var sfx = load("res://my_sfx_resource.tres")
 AudioManager.play_sfx(sfx)
 
 # Play music with crossfade
-var music = preload("res://my_music_resource.tres")
+var music = load("res://my_music_resource.tres")
 AudioManager.play_music(music)
 
 # Play from playlist
-var playlist = preload("res://my_playlist_resource.tres")
+var playlist = load("res://my_playlist_resource.tres")
 AudioManager.play_playlist(playlist)
 ```
 
