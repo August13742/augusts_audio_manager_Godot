@@ -173,9 +173,23 @@ func play_sfx_playlist(playlist:SFXPlaylistResource, volume_scale := 1.0):
 	var next_track := playlist.get_next_track()
 	if next_track:
 		play_sfx(next_track, volume_scale)
-		
-## Plays a positional one-shot SFX from a resource.
-func play_sfx_at_position(resource: SFXResource, pos: Vector2, volume_scale := 1.0):
+
+## Plays a 3D positional one-shot SFX from a resource.
+func play_sfx_at_position3D(resource: SFXResource, pos: Vector3, volume_scale := 1.0):
+	if not resource or not resource.stream:
+		push_warning("[AudioManager] play_sfx_at_position called with an invalid resource.")
+		return
+
+	if resource.loop:
+		push_warning("[AudioManager] Looping SFX cannot be played positionally. Use a standard Node3D with an AudioStreamPlayer3D for this.")
+		return
+
+	var final_volume = resource.volume_linear * volume_scale
+	play_sfx_at_position3D_from_stream(resource.stream, pos, final_volume, resource.pitch_scale)
+
+
+## Plays a 2D positional one-shot SFX from a resource.
+func play_sfx_at_position2D(resource: SFXResource, pos: Vector2, volume_scale := 1.0):
 	if not resource or not resource.stream:
 		push_warning("[AudioManager] play_sfx_at_position called with an invalid resource.")
 		return
@@ -185,12 +199,148 @@ func play_sfx_at_position(resource: SFXResource, pos: Vector2, volume_scale := 1
 		return
 
 	var final_volume = resource.volume_linear * volume_scale
-	play_sfx_at_position_from_stream(resource.stream, pos, final_volume, resource.pitch_scale)
+	play_sfx_at_position2D_from_stream(resource.stream, pos, final_volume, resource.pitch_scale)
 
 ## Stops a looping SFX using its resource definition.
 func stop_sfx(resource: SFXResource, fade_out_s := 0.0):
 	if resource and resource.loop:
 		stop_looped_sfx(resource.event_name, fade_out_s)
+#endregion
+#region Utilities – moving emitters (2D/3D, streams/resources, playlists)
+
+## ------------- 3D: single sound, follows a Node3D -------------
+
+## From SFXResource
+func play_sfx_at_node3D(
+	resource: SFXResource,
+	parent: Node3D,
+	volume_scale: float = 1.0,
+	pitch_jitter: float = 0.0,
+	vol_jitter:   float = 0.0
+) -> void:
+	if resource == null or resource.stream == null:
+		push_warning("[AudioManager] play_sfx_at_node3D invalid resource."); return
+	if resource.loop:
+		push_warning("[AudioManager] Looping SFX should be a dedicated AudioStreamPlayer3D."); return
+
+	var p: float = resource.pitch_scale * randf_range(1.0 - pitch_jitter, 1.0 + pitch_jitter)
+	var v: float = resource.volume_linear * volume_scale * randf_range(1.0 - vol_jitter, 1.0 + vol_jitter)
+	play_sfx_at_node3D_from_stream(resource.stream, parent, v, p)
+
+# From stream
+func play_sfx_at_node3D_from_stream(
+	stream: AudioStream,
+	parent: Node3D,
+	volume_linear: float = 1.0,
+	pitch_scale: float = 1.0,
+	reverb_bus: String = "",
+	max_distance: float = 50.0,
+	attenuation: int = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE,
+	unit_size: float = 1.0,
+	doppler: int = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+) -> void:
+	if not enable_spatial_api:
+		play_sfx_one_shot(stream, volume_linear, pitch_scale); return
+	if stream == null or parent == null:
+		return
+
+	var p3d := AudioStreamPlayer3D.new()
+	p3d.bus = "SFX"
+	p3d.stream = stream
+	p3d.attenuation_model = attenuation
+	p3d.max_distance = max_distance
+	p3d.unit_size = unit_size
+	p3d.doppler_tracking = doppler
+	if reverb_bus != "":
+		p3d.reverb_bus = reverb_bus
+		p3d.reverb_bus_send = 1.0
+
+	var params := _clamp_params(volume_linear, pitch_scale, false)
+	p3d.volume_linear = float(params[0])
+	p3d.pitch_scale = float(params[1])
+
+	parent.add_child(p3d)
+	p3d.finished.connect(p3d.queue_free)
+	p3d.play()
+
+
+## ------------- 2D: single sound, follows a Node2D -------------
+
+func play_sfx_at_node2D(
+	resource: SFXResource,
+	parent: Node2D,
+	volume_scale: float = 1.0,
+	pitch_jitter: float = 0.0,
+	vol_jitter:   float = 0.0
+) -> void:
+	if resource == null or resource.stream == null:
+		push_warning("[AudioManager] play_sfx_at_node2D invalid resource."); return
+	if resource.loop:
+		push_warning("[AudioManager] Looping SFX should be a dedicated AudioStreamPlayer2D."); return
+	var p := resource.pitch_scale * randf_range(1.0 - pitch_jitter, 1.0 + pitch_jitter)
+	var v := resource.volume_linear * volume_scale * randf_range(1.0 - vol_jitter, 1.0 + vol_jitter)
+	play_sfx_at_node2D_from_stream(resource.stream, parent, v, p)
+
+func play_sfx_at_node2D_from_stream(
+	stream: AudioStream,
+	parent: Node2D,
+	volume_linear: float = 1.0,
+	pitch_scale: float = 1.0
+) -> void:
+	if not enable_spatial_api:
+		play_sfx_one_shot(stream, volume_linear, pitch_scale); return
+	if stream == null or parent == null: return
+
+	var p2d := AudioStreamPlayer2D.new()
+	p2d.bus = "SFX"
+	p2d.stream = stream
+	var params := _clamp_params(volume_linear, pitch_scale, false)
+	p2d.volume_linear = float(params[0])
+	p2d.pitch_scale = float(params[1])
+
+	parent.add_child(p2d)
+	p2d.finished.connect(p2d.queue_free)
+	p2d.play()
+
+
+
+## ------------- 3D: playlist, follows a Node3D -------------
+
+## Picks next track according to playlist mode
+func play_sfx_playlist_at_node3D(
+	playlist: SFXPlaylistResource,
+	parent: Node3D,
+	volume_scale: float = 1.0,
+	pitch_jitter: float = 0.0,
+	vol_jitter:   float = 0.0,
+	reverb_bus: String = "",
+	max_distance: float = 50.0,
+	attenuation: int = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE,
+	unit_size: float = 1.0,
+	doppler: int = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+) -> void:
+	if playlist == null or playlist.tracks.is_empty():
+		push_warning("[AudioManager] play_sfx_playlist_at_node3D invalid playlist."); return
+	var r: SFXResource = playlist.get_next_track()
+	if r == null or r.stream == null: return
+	var p := r.pitch_scale * randf_range(1.0 - pitch_jitter, 1.0 + pitch_jitter)
+	var v := r.volume_linear * volume_scale * randf_range(1.0 - vol_jitter, 1.0 + vol_jitter)
+	play_sfx_at_node3D_from_stream(r.stream, parent, v, p, reverb_bus, max_distance, attenuation, unit_size, doppler)
+
+func play_sfx_playlist_at_node2D(
+	playlist: SFXPlaylistResource,
+	parent: Node2D,
+	volume_scale: float = 1.0,
+	pitch_jitter: float = 0.0,
+	vol_jitter:   float = 0.0
+) -> void:
+	if playlist == null or playlist.tracks.is_empty():
+		push_warning("[AudioManager] play_sfx_playlist_at_node2D invalid playlist."); return
+	var r: SFXResource = playlist.get_next_track()
+	if r == null or r.stream == null: return
+	var p := r.pitch_scale * randf_range(1.0 - pitch_jitter, 1.0 + pitch_jitter)
+	var v := r.volume_linear * volume_scale * randf_range(1.0 - vol_jitter, 1.0 + vol_jitter)
+	play_sfx_at_node2D_from_stream(r.stream, parent, v, p)
 #endregion
 
 #region Public API - Low Level (Parameter-Based)
@@ -255,7 +405,7 @@ func stop_looped_sfx(event_name: StringName, fade_out_s := 0.0):
 		callback.call()
 
 ## (Low-Level) Plays a positional one-shot SFX (2D).
-func play_sfx_at_position_from_stream(stream: AudioStream, pos: Vector2, volume_linear := 1.0, pitch_scale := 1.0):
+func play_sfx_at_position2D_from_stream(stream: AudioStream, pos: Vector2, volume_linear := 1.0, pitch_scale := 1.0):
 	if not enable_spatial_api:
 		play_sfx_one_shot(stream, volume_linear, pitch_scale)
 		return
@@ -270,6 +420,48 @@ func play_sfx_at_position_from_stream(stream: AudioStream, pos: Vector2, volume_
 	add_child(p2d)
 	p2d.finished.connect(p2d.queue_free)
 	p2d.play()
+	
+## (Low-Level) Plays a positional one-shot SFX (3D).
+func play_sfx_at_position3D_from_stream(
+	stream: AudioStream,
+	pos: Vector3,
+	volume_linear := 1.0,
+	pitch_scale := 1.0,
+	max_distance := 50.0,
+	attenuation := AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE, ## Godot 4 enum
+	unit_size := 1.0,
+	doppler := AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED,
+	reverb_bus := ""  ## e.g., "Reverb" if you’ve set one up
+) -> void:
+	if not enable_spatial_api:
+		play_sfx_one_shot(stream, volume_linear, pitch_scale)
+		return
+	if stream == null:
+		return
+
+	var p3d := AudioStreamPlayer3D.new()
+	p3d.bus = "SFX"
+	p3d.stream = stream
+
+	# Spatial params
+	p3d.attenuation_model = attenuation
+	p3d.max_distance = max_distance           # hard cutoff distance
+	p3d.unit_size = unit_size                 # 1.0 means 1 Godot unit == 1 meter (keep it consistent game-wide)
+	p3d.doppler_tracking = doppler
+	if reverb_bus != "":
+		p3d.reverb_bus = reverb_bus
+		p3d.reverb_bus_send = 1.0             # send amount 0..1
+
+	# Volume/pitch. No “boost” above 1.0 for spatial; distance will scale it.
+	var params := _clamp_params(volume_linear, pitch_scale, false)
+	p3d.volume_linear = params[0]
+	p3d.pitch_scale = params[1]
+
+	# Position and lifetime
+	p3d.global_position = pos
+	add_child(p3d)
+	p3d.finished.connect(p3d.queue_free)
+	p3d.play()
 #endregion
 
 #region Public API - Music
