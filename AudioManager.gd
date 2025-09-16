@@ -152,9 +152,9 @@ func play_sfx(resource: SFXResource, volume_scale := 1.0) -> int:
 ## Plays a random one-shot SFX from an array of resources.
 ## Applies optional volume and pitch jitter to the selected resource's base values.
 func play_sfx_random(playlist:SFXPlaylistResource, volume_scale := 1.0, pitch_jitter := 0.0, vol_jitter := 0.0) -> int:
-	if playlist.sfx_resources.is_empty(): return -1
+	if playlist.tracks.is_empty(): return -1
 	
-	var resource: SFXResource = playlist.sfx_resources.pick_random()
+	var resource: SFXResource = playlist.tracks.pick_random()
 	if not resource or not resource.stream:
 		push_warning("[AudioManager] play_sfx_random picked an invalid resource.")
 		return -1
@@ -164,6 +164,16 @@ func play_sfx_random(playlist:SFXPlaylistResource, volume_scale := 1.0, pitch_ji
 
 	return play_sfx_one_shot(resource.stream, final_volume, final_pitch, resource.event_name, resource.track_finish)
 
+## Plays a track from a playlist resource
+func play_sfx_playlist(playlist:SFXPlaylistResource, volume_scale := 1.0):
+	if not playlist or playlist.tracks.is_empty():
+		push_warning("[AudioManager] play_playlist called with an invalid playlist.")
+		return
+	
+	var next_track := playlist.get_next_track()
+	if next_track:
+		play_sfx(next_track, volume_scale)
+		
 ## Plays a positional one-shot SFX from a resource.
 func play_sfx_at_position(resource: SFXResource, pos: Vector2, volume_scale := 1.0):
 	if not resource or not resource.stream:
@@ -283,7 +293,7 @@ func play_music(resource: MusicResource, volume_scale := 1.0, fade_override_s :=
 	)
 
 ## Plays a track from a playlist resource, respecting its playback mode.
-func play_playlist(playlist: MusicPlaylistResource, volume_scale := 1.0, fade_override_s := -1.0, start_position_s := 0.0):
+func play_music_playlist(playlist: MusicPlaylistResource, volume_scale := 1.0, fade_override_s := -1.0, start_position_s := 0.0):
 	if not playlist or playlist.tracks.is_empty():
 		push_warning("[AudioManager] play_playlist called with an invalid playlist.")
 		return
