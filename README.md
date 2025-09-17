@@ -1,43 +1,73 @@
-# August's Audio Manager (WIP) for Personal Godot Projects
+# August’s Audio Manager (WIP) for Personal Godot Projects (Snapshot Sept. 2025)
 
-A comprehensive audio management plugin for Godot 4 that provides centralized control over sound effects and music with resource-based configuration.
+Centralised audio management plugin for Godot 4. Handles sound effects and music with resource-driven configuration. Focus is on reliability and integration.
 
 ## Features
 
-- **Resource-Based Audio**: Define audio with [`SFXResource`](resource_scripts/sfx_resource.gd), [`MusicResource`](resource_scripts/music_resource.gd), and [`MusicPlaylistResource`](resource_scripts/music_playlist_resource.gd)
-- **Polyphonic SFX**: Multiple sound effects can play simultaneously
-- **Looping SFX Management**: Named looping sounds with individual control
-- **Music Crossfading**: Smooth transitions between tracks
-- **Playlist Support**: Sequential and shuffle playback modes
-- **Global Audio Controls**: Master volume, pause, and bus management
+* **Resource-based config**
+  Define audio with [`SFXResource`](resource_scripts/sfx_resource.gd), [`MusicResource`](resource_scripts/music_resource.gd), [`MusicPlaylistResource`](resource_scripts/music_playlist_resource.gd), [`SFXPlaylistResource`](resource_scripts/sfx_playlist_resource.gd).
+* **Polyphonic SFX**
+  Multiple one-shots simultaneously via `AudioStreamPolyphonic`.
+* **Looping SFX**
+  Named loop instances with independent stop/fade control.
+* **Music crossfade**
+  Smooth transitions between tracks, with optional fade override.
+* **Playlists**
+  Sequential and shuffle playback for both music and SFX.
+* **Global audio control**
+  Master/music/SFX bus volume, pause, and mute handling.
 
-## Quick Setup
+## Requirements
 
-1. Copy the plugin to `res://addons/augusts_audio_manager` (exact match or edit plugin.gd yourself)
-2. Enable the plugin in Project Settings
-3. Ensure audio buses exist: `Master` → `Music` and `SFX`
+* Godot 4.5+
+* Audio bus layout must exist before runtime:
 
-## Basic Usage
+  ```
+  Master ─┬─ Music
+          └─ SFX
+  ```
+
+## Setup
+
+1. Copy plugin into:
+   `res://addons/augusts_audio_manager/`
+2. Enable the plugin in **Project Settings → Plugins**.
+3. Buses `Master`, `Music`, and `SFX` must exist (asserts on missing buses).
+
+This registers `AudioManager` as a global autoload singleton and adds custom resource types to the editor.
+
+## Usage
 
 ```gdscript
-# Play a sound effect
-var sfx = load("res://my_sfx_resource.tres")
+# Play a one-shot SFX
+var sfx: SFXResource = load("res://my_sfx_resource.tres")
 AudioManager.play_sfx(sfx)
 
-# Play music with crossfade
-var music = load("res://my_music_resource.tres")
+# Play looping music with crossfade
+var music: MusicResource = load("res://my_music_resource.tres")
 AudioManager.play_music(music)
 
-# Play from playlist
-var playlist = load("res://my_playlist_resource.tres")
-AudioManager.play_playlist(playlist)
+# Play next track in playlist
+var playlist: MusicPlaylistResource = load("res://my_playlist.tres")
+AudioManager.play_music_playlist(playlist)
+
+# Spatial one-shot (3D)
+AudioManager.play_sfx_at_position3D_from_stream(load("res://explosion.ogg"), Vector3.ZERO)
 ```
 
-## Core Components
+## Components
 
-- [`AudioManager`](AudioManager.gd): Main singleton handling all audio operations
-- [`plugin.gd`](plugin.gd): Editor plugin registration and custom resource types
+* **[`AudioManager.gd`](AudioManager.gd)**
+  Core singleton handling playback, looping, crossfades, and finish tracking.
+* **[`plugin.gd`](plugin.gd)**
+  Editor plugin: autoload registration + resource type definitions.
+* **Resource scripts**
+
+  * `sfx_resource.gd`
+  * `sfx_playlist_resource.gd`
+  * `music_resource.gd`
+  * `music_playlist_resource.gd`
 
 ## License
 
-MIT License - see [`LICENSE`](LICENSE)
+MIT — see [`LICENSE`](LICENSE).
